@@ -1,0 +1,94 @@
+From 019d4ea40aec6a705e9c3a2b7bdc33b324a32d34 Mon Sep 17 00:00:00 2001
+From: John Thomson <git@johnthomson.fastmail.com.au>
+Date: Thu, 22 Oct 2020 14:03:36 +0200
+Subject: [PATCH] arm: Add support for vmlinux appended DTB
+
+Add support for booting with a device tree that is appended to
+vmlinux ELF section .appended_dtb.
+By default it is empty and the DTB can be appended using binutils command
+objcopy:
+	objcopy --update-section .appended_dtb=<filename>.dtb vmlinux
+
+This is meant to support devices where bootloader cant be replaced like
+MikroTik devices that use RouterBoot.
+
+Signed-off-by: John Thomson <git@johnthomson.fastmail.com.au>
+Signed-off-by: Robert Marko <robert.marko@sartura.hr>
+---
+ arch/arm/Kconfig                       | 15 +++++++++++++++
+ arch/arm/boot/compressed/head.S        |  2 +-
+ arch/arm/boot/compressed/misc.c        |  4 ++++
+ arch/arm/boot/compressed/vmlinux.lds.S |  9 +++++++++
+ 4 files changed, 29 insertions(+), 1 deletion(-)
+
+--- a/arch/arm/Kconfig
++++ b/arch/arm/Kconfig
+@@ -1796,6 +1796,21 @@ config ARM_APPENDED_DTB
+ 	  location into r2 of a bootloader provided DTB is always preferable
+ 	  to this option.
+ 
++config ARM_ELF_APPENDED_DTB
++	bool "Use appended device tree blob to vmlinux (EXPERIMENTAL)"
++	depends on OF
++	help
++	  With this option, the boot code will look for a device tree binary
++	  DTB) included in the vmlinux ELF section .appended_dtb. By default
++	  it is empty and the DTB can be appended using binutils command
++	  objcopy:
++
++	  	objcopy --update-section .appended_dtb=<filename>.dtb vmlinux
++
++	  This is meant as a backward compatiblity convenience for those
++	  systems with a bootloader that can't be upgraded to accommodate
++	  the documented boot protocol using a device tree.
++
+ config ARM_ATAG_DTB_COMPAT
+ 	bool "Supplement the appended DTB with traditional ATAG information"
+ 	depends on ARM_APPENDED_DTB
+--- a/arch/arm/boot/compressed/head.S
++++ b/arch/arm/boot/compressed/head.S
+@@ -302,7 +302,7 @@ restart:	adr	r0, LC0
+ #endif
+ 
+ 		mov	r5, #0			@ init dtb size to 0
+-#ifdef CONFIG_ARM_APPENDED_DTB
++#if defined (CONFIG_ARM_APPENDED_DTB) || defined (CONFIG_ARM_ELF_APPENDED_DTB)
+ /*
+  *   r0  = delta
+  *   r2  = BSS start
+--- a/arch/arm/boot/compressed/misc.c
++++ b/arch/arm/boot/compressed/misc.c
+@@ -28,6 +28,10 @@ static void putstr(const char *ptr);
+ 
+ #include CONFIG_UNCOMPRESS_INCLUDE
+ 
++#ifdef CONFIG_ARM_ELF_APPENDED_DTB
++const char __section(.appended_dtb) __appended_dtb[0x100000];
++#endif
++
+ #ifdef CONFIG_DEBUG_ICEDCC
+ 
+ #if defined(CONFIG_CPU_V6) || defined(CONFIG_CPU_V6K) || defined(CONFIG_CPU_V7)
+--- a/arch/arm/boot/compressed/vmlinux.lds.S
++++ b/arch/arm/boot/compressed/vmlinux.lds.S
+@@ -93,6 +93,13 @@ SECTIONS
+ 
+   _edata = .;
+ 
++#ifdef CONFIG_ARM_ELF_APPENDED_DTB
++  .appended_dtb : {
++    *(.appended_dtb)
++    KEEP(*(.appended_dtb))
++  }
++#endif
++
+   /*
+    * The image_end section appears after any additional loadable sections
+    * that the linker may decide to insert in the binary image.  Having
+@@ -132,4 +139,6 @@ SECTIONS
+   .stab.indexstr 0	: { *(.stab.indexstr) }
+   .comment 0		: { *(.comment) }
+ }
++#ifndef CONFIG_ARM_ELF_APPENDED_DTB
+ ASSERT(_edata_real == _edata, "error: zImage file size is incorrect");
++#endif
