@@ -25,7 +25,7 @@ Signed-off-by: Robert Marko <robert.marko@sartura.hr>
 
 --- a/drivers/net/phy/Kconfig
 +++ b/drivers/net/phy/Kconfig
-@@ -540,6 +540,12 @@ config NXP_TJA11XX_PHY
+@@ -541,6 +541,12 @@ config NXP_TJA11XX_PHY
  	---help---
  	  Currently supports the NXP TJA1100 and TJA1101 PHY.
  
